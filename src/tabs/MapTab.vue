@@ -509,7 +509,7 @@
     background: #000000;
     position: relative;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
   }
 
