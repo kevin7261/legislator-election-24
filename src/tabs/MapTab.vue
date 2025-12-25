@@ -24,11 +24,11 @@
       const candidateData = ref([]);
 
       // 政黨資料：從中間開始分配（無黨籍、民進黨、國民黨）
-      // 使用更柔和的配色方案
+      // 使用更美觀的配色方案
       const partyData = [
-        { id: 'IND', name: '無黨籍', count: 2, color: '#B0B0B0' }, // 淺灰色，中間
-        { id: 'DPP', name: '民進黨', count: 38, color: '#52C41A' }, // 柔和的綠色，左側
-        { id: 'KMT', name: '國民黨', count: 39, color: '#1890FF' }, // 柔和的藍色，右側
+        { id: 'IND', name: '無黨籍', count: 2, color: '#95A5A6' }, // 優雅的灰色，中間
+        { id: 'DPP', name: '民進黨', count: 38, color: '#6BCB77' }, // 清新的綠色，左側
+        { id: 'KMT', name: '國民黨', count: 39, color: '#4D96FF' }, // 明亮的藍色，右側
       ];
 
       // ⚙️ 面積計算配置：面積 = 得票數 / areaDivisor
