@@ -38,6 +38,19 @@
       };
 
       /**
+       * 生成立委照片 URL（使用本地照片）
+       * @param {string} name - 候選人姓名
+       * @returns {string} 照片 URL
+       */
+      const getLegislatorPhotoUrl = (name) => {
+        if (!name) return '';
+
+        // 使用本地照片
+        const cleanName = name.trim();
+        return `/legislator-election-24/data/images/${encodeURIComponent(cleanName)}.jpg`;
+      };
+
+      /**
        * 讀取 CSV 資料並排序
        */
       const loadCandidateData = async () => {
@@ -277,12 +290,12 @@
         const baseRadius = Math.min(maxRadius / 14, 18);
 
         // 為每個座位計算半徑（根據得票數）
-        // 面積 = 得票數 / 10
-        // 面積 = π × r²，所以 r = √(得票數 / (10 × π))
+        // 面積 = 得票數 / 15
+        // 面積 = π × r²，所以 r = √(得票數 / (15 × π))
         filteredData.forEach((seat) => {
           if (seat.votes && seat.votes > 0) {
-            // 半徑 = √(得票數 / (10 × π))
-            seat.radius = Math.sqrt(seat.votes / (10 * Math.PI));
+            // 半徑 = √(得票數 / (15 × π))
+            seat.radius = Math.sqrt(seat.votes / (15 * Math.PI));
           } else {
             // 如果沒有得票數，使用預設半徑
             seat.radius = baseRadius;
@@ -310,7 +323,10 @@
         // 創建主容器組，移到下方中間
         const g = svg.append('g').attr('transform', `translate(${width / 2}, ${height - 30})`);
 
-        // 為每個座位創建一個組（包含圓點和文字）
+        // 創建 defs 用於定義 clipPath
+        const defs = svg.append('defs');
+
+        // 為每個座位創建一個組（包含圖片和文字）
         const seatGroups = g
           .selectAll('.seat-group')
           .data(filteredData)
@@ -319,22 +335,58 @@
           .attr('class', 'seat-group')
           .attr('transform', (d) => `translate(${d.x}, ${-d.y})`);
 
-        // 繪製座位圓點（根據得票數調整半徑，移除白色邊框，透明度50%）
+        // 為每個座位創建圓形 clipPath
+        seatGroups.each(function (d, i) {
+          const clipId = `clip-seat-${i}`;
+          const radius = d.radius || baseRadius;
+
+          const clipPath = defs.append('clipPath').attr('id', clipId);
+          clipPath.append('circle').attr('cx', 0).attr('cy', 0).attr('r', radius);
+
+          d.clipId = clipId;
+        });
+
+        // 繪製立委照片（黑白、圓形裁剪、寬度等於圓直徑、完全填充）
         seatGroups
-          .append('circle')
-          .attr('class', 'seat')
-          .attr('cx', 0)
-          .attr('cy', 0)
-          .attr('r', (d) => d.radius || Math.min(maxRadius / 14, 18))
-          .attr('fill', (d) => d.color)
-          .attr('stroke', 'none')
+          .append('image')
+          .attr('class', 'seat-photo')
+          .attr('x', (d) => -(d.radius || baseRadius))
+          .attr('y', (d) => -(d.radius || baseRadius))
+          .attr('width', (d) => (d.radius || baseRadius) * 2)
+          .attr('height', (d) => (d.radius || baseRadius) * 2)
+          .attr('href', (d) => getLegislatorPhotoUrl(d.candidateName || ''))
+          .attr('clip-path', (d) => `url(#${d.clipId})`)
           .attr('opacity', 0.5) // 透明度50%
           .attr('cursor', 'pointer')
+          .attr('preserveAspectRatio', 'xMidYMid slice') // 保持比例並完全填充圓形
+          .style('filter', 'grayscale(100%)') // 黑白濾鏡
           .on('mouseover', function () {
             d3.select(this).attr('opacity', 0.8);
           })
           .on('mouseout', function () {
             d3.select(this).attr('opacity', 0.5); // 恢復到50%透明度
+          })
+          .on('error', function () {
+            // 如果圖片載入失敗，顯示顏色圓點作為備用
+            const parent = d3.select(this.parentNode);
+            const d = parent.datum();
+            d3.select(this).remove();
+            parent
+              .append('circle')
+              .attr('class', 'seat-fallback')
+              .attr('cx', 0)
+              .attr('cy', 0)
+              .attr('r', d.radius || baseRadius)
+              .attr('fill', d.color)
+              .attr('stroke', 'none')
+              .attr('opacity', 0.5)
+              .attr('cursor', 'pointer')
+              .on('mouseover', function () {
+                d3.select(this).attr('opacity', 0.8);
+              })
+              .on('mouseout', function () {
+                d3.select(this).attr('opacity', 0.5);
+              });
           });
 
         // 統一字體大小為14px
@@ -456,6 +508,9 @@
     overflow: hidden;
     background: #000000;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   :deep(.seat) {
