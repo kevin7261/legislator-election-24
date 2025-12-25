@@ -24,30 +24,28 @@
       const candidateData = ref([]);
 
       // 政黨資料：從中間開始分配（無黨籍、民進黨、國民黨）
+      // 使用更柔和的配色方案
       const partyData = [
-        { id: 'IND', name: '無黨籍', count: 2, color: '#999999' }, // 灰色，中間
-        { id: 'DPP', name: '民進黨', count: 38, color: '#1b9431' }, // 綠色，左側
-        { id: 'KMT', name: '國民黨', count: 39, color: '#000095' }, // 藍色，右側
+        { id: 'IND', name: '無黨籍', count: 2, color: '#B0B0B0' }, // 淺灰色，中間
+        { id: 'DPP', name: '民進黨', count: 38, color: '#52C41A' }, // 柔和的綠色，左側
+        { id: 'KMT', name: '國民黨', count: 39, color: '#1890FF' }, // 柔和的藍色，右側
       ];
+
+      // 截取名字的第一個空白前的部分
+      const getShortName = (name) => {
+        if (!name) return '';
+        const firstSpaceIndex = name.indexOf(' ');
+        if (firstSpaceIndex > 0) {
+          return name.substring(0, firstSpaceIndex);
+        }
+        return name;
+      };
 
       // 政黨名稱對應
       const partyNameMap = {
         民主進步黨: 'DPP',
         中國國民黨: 'KMT',
         無: 'IND',
-      };
-
-      /**
-       * 生成立委照片 URL（使用本地照片）
-       * @param {string} name - 候選人姓名
-       * @returns {string} 照片 URL
-       */
-      const getLegislatorPhotoUrl = (name) => {
-        if (!name) return '';
-
-        // 使用本地照片
-        const cleanName = name.trim();
-        return `/legislator-election-24/data/images/${encodeURIComponent(cleanName)}.jpg`;
       };
 
       /**
@@ -318,15 +316,12 @@
           .append('svg')
           .attr('width', width)
           .attr('height', height)
-          .style('background', '#000000');
+          .style('background', '#FFFFFF');
 
         // 創建主容器組，移到下方中間
         const g = svg.append('g').attr('transform', `translate(${width / 2}, ${height - 30})`);
 
-        // 創建 defs 用於定義 clipPath
-        const defs = svg.append('defs');
-
-        // 為每個座位創建一個組（包含圖片和文字）
+        // 為每個座位創建一個組（包含圓圈和文字）
         const seatGroups = g
           .selectAll('.seat-group')
           .data(filteredData)
@@ -335,121 +330,101 @@
           .attr('class', 'seat-group')
           .attr('transform', (d) => `translate(${d.x}, ${-d.y})`);
 
-        // 為每個座位創建圓形 clipPath
-        seatGroups.each(function (d, i) {
-          const clipId = `clip-seat-${i}`;
-          const radius = d.radius || baseRadius;
-
-          const clipPath = defs.append('clipPath').attr('id', clipId);
-          clipPath.append('circle').attr('cx', 0).attr('cy', 0).attr('r', radius);
-
-          d.clipId = clipId;
-        });
-
-        // 繪製立委照片（黑白、圓形裁剪、寬度等於圓直徑、完全填充）
+        // 繪製背景圓圈（使用政黨顏色）
         seatGroups
-          .append('image')
-          .attr('class', 'seat-photo')
-          .attr('x', (d) => -(d.radius || baseRadius))
-          .attr('y', (d) => -(d.radius || baseRadius))
-          .attr('width', (d) => (d.radius || baseRadius) * 2)
-          .attr('height', (d) => (d.radius || baseRadius) * 2)
-          .attr('href', (d) => getLegislatorPhotoUrl(d.candidateName || ''))
-          .attr('clip-path', (d) => `url(#${d.clipId})`)
-          .attr('opacity', 0.5) // 透明度50%
+          .append('circle')
+          .attr('class', 'seat-circle')
+          .attr('cx', 0)
+          .attr('cy', 0)
+          .attr('r', (d) => d.radius || baseRadius)
+          .attr('fill', (d) => d.color)
+          .attr('stroke', '#FFFFFF')
+          .attr('stroke-width', 2)
+          .attr('opacity', 0.9)
           .attr('cursor', 'pointer')
-          .attr('preserveAspectRatio', 'xMidYMid slice') // 保持比例並完全填充圓形
-          .style('filter', 'grayscale(100%)') // 黑白濾鏡
           .on('mouseover', function () {
-            d3.select(this).attr('opacity', 0.8);
+            d3.select(this).attr('opacity', 1).attr('stroke-width', 3);
           })
           .on('mouseout', function () {
-            d3.select(this).attr('opacity', 0.5); // 恢復到50%透明度
-          })
-          .on('error', function () {
-            // 如果圖片載入失敗，顯示顏色圓點作為備用
-            const parent = d3.select(this.parentNode);
-            const d = parent.datum();
-            d3.select(this).remove();
-            parent
-              .append('circle')
-              .attr('class', 'seat-fallback')
-              .attr('cx', 0)
-              .attr('cy', 0)
-              .attr('r', d.radius || baseRadius)
-              .attr('fill', d.color)
-              .attr('stroke', 'none')
-              .attr('opacity', 0.5)
-              .attr('cursor', 'pointer')
-              .on('mouseover', function () {
-                d3.select(this).attr('opacity', 0.8);
-              })
-              .on('mouseout', function () {
-                d3.select(this).attr('opacity', 0.5);
-              });
+            d3.select(this).attr('opacity', 0.9).attr('stroke-width', 2);
           });
 
-        // 統一字體大小為14px
+        // 字體設定
         const fontSize = 14;
+        const lineSpacing = 8; // 行間距
+        const fontFamily =
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Helvetica Neue", Arial, sans-serif';
+        const textColor = '#333333'; // 統一顏色
 
-        // 繪製排名（在名字上方）
+        // 計算文字整體高度，用於垂直居中
+        const totalTextHeight = fontSize + lineSpacing + fontSize + lineSpacing + fontSize;
+        const startY = -totalTextHeight / 2 + fontSize / 2;
+
+        // 繪製排名（第一行）
         seatGroups
           .append('text')
           .attr('class', 'seat-rank')
           .attr('text-anchor', 'middle')
           .attr('x', 0)
-          .attr('y', (d) => -(d.radius || baseRadius) * 0.7) // 在圓的上方
+          .attr('y', startY)
           .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .style('font-family', 'Arial, sans-serif')
-          .style('fill', '#ffffff')
+          .style('font-weight', '600')
+          .style('font-family', fontFamily)
+          .style('fill', textColor)
+          .style('letter-spacing', '0.5px')
           .style('pointer-events', 'none')
+          .style('dominant-baseline', 'middle')
           .text((d) => (d.rank ? `${d.rank}` : ''));
 
-        // 繪製候選人姓名
+        // 繪製姓名（第二行，居中）
         seatGroups
           .append('text')
-          .attr('class', 'seat-number')
+          .attr('class', 'seat-name')
           .attr('text-anchor', 'middle')
           .attr('x', 0)
-          .attr('y', (d) => (d.radius || baseRadius) * 0.2) // 姓名位置稍微上移
+          .attr('y', startY + fontSize + lineSpacing)
           .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .style('font-family', 'Arial, sans-serif')
-          .style('fill', '#ffffff')
-          .style('pointer-events', 'none') // 讓文字不阻擋滑鼠事件
-          .text((d) => d.candidateName || '');
+          .style('font-weight', '700')
+          .style('font-family', fontFamily)
+          .style('fill', textColor)
+          .style('letter-spacing', '0.3px')
+          .style('pointer-events', 'none')
+          .style('dominant-baseline', 'middle')
+          .text((d) => getShortName(d.candidateName || ''));
 
-        // 繪製得票數（在姓名下方）
+        // 繪製得票數（第三行）
         seatGroups
           .append('text')
           .attr('class', 'seat-votes')
           .attr('text-anchor', 'middle')
           .attr('x', 0)
-          .attr('y', (d) => (d.radius || baseRadius) * 0.5) // 在姓名下方
+          .attr('y', startY + fontSize + lineSpacing + fontSize + lineSpacing)
           .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'normal')
-          .style('font-family', 'Arial, sans-serif')
-          .style('fill', '#ffffff')
-          .style('opacity', 0.9)
+          .style('font-weight', '500')
+          .style('font-family', fontFamily)
+          .style('fill', textColor)
+          .style('letter-spacing', '0.2px')
           .style('pointer-events', 'none')
+          .style('dominant-baseline', 'middle')
           .text((d) => {
             if (d.votes && d.votes > 0) {
-              // 格式化得票數，加上千分位逗號
               return d.votes.toLocaleString('zh-TW');
             }
             return '';
           });
 
         // 繪製中間的大數字（總席次）
+        const totalSeatsFontSize = Math.min(maxRadius / 3, 60);
         g.append('text')
           .attr('text-anchor', 'middle')
           .attr('x', 0)
           .attr('y', -10)
-          .style('font-size', `${Math.min(maxRadius / 3, 60)}px`)
-          .style('font-weight', 'bold')
-          .style('font-family', 'Arial, sans-serif')
-          .style('fill', '#ffffff')
+          .style('font-size', `${totalSeatsFontSize}px`)
+          .style('font-weight', '700')
+          .style('font-family', fontFamily)
+          .style('fill', '#1a1a1a') // 深色文字
+          .style('letter-spacing', '2px')
+          .style('opacity', 0.85)
           .text(totalSeats);
 
         // eslint-disable-next-line no-console
@@ -506,7 +481,7 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #000000;
+    background: #ffffff;
     position: relative;
     display: flex;
     align-items: flex-start;
