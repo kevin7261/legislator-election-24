@@ -7,6 +7,7 @@
    * 2. ⏳ 管理全域載入狀態和進度顯示
    * 3. 🚀 管理 Vue Router 的路由導航系統
    * 4. 📱 實現響應式滿版佈局，無邊距和空隙
+   * 5. 📊 載入應用程式所需的數據
    *
    * 架構說明：
    * - 內容層：路由視圖容器，動態顯示不同頁面組件
@@ -16,8 +17,21 @@
    * - 模組化組件架構
    */
 
+  import { onMounted } from 'vue';
+  import { useDataStore } from './stores/dataStore';
+
   export default {
     name: 'App',
+    setup() {
+      const dataStore = useDataStore();
+
+      // 應用程式啟動時載入數據
+      onMounted(() => {
+        dataStore.loadElectedLegislators();
+      });
+
+      return {};
+    },
   };
 </script>
 

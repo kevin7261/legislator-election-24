@@ -1,8 +1,9 @@
 <script>
   /**
-   * 🏛️ MapTab.vue - 議會席位圖組件
+   * 🏛️ MapTab.vue - 議會席位圖
    *
-   * 使用 D3.js 繪製半圓形議會席位圖，共 79 席
+   * 使用 D3.js 繪製半圓形議會席位圖
+   * 5 排、下方平、政黨顏色區分、每個座位都有編號
    */
 
   import { ref, onMounted, onUnmounted, nextTick } from 'vue';
@@ -10,52 +11,127 @@
 
   export default {
     name: 'MapTab',
+    props: {
+      // 總席次數，可以通過 props 傳入，預設 79
+      totalSeats: {
+        type: Number,
+        default: 79,
+      },
+    },
     setup() {
       const containerRef = ref(null);
       let svg = null;
-      let g = null;
+      const candidateData = ref([]);
+
+      // 政黨資料：從中間開始分配（無黨籍、民進黨、國民黨）
+      const partyData = [
+        { id: 'IND', name: '無黨籍', count: 2, color: '#999999' }, // 灰色，中間
+        { id: 'DPP', name: '民進黨', count: 38, color: '#1b9431' }, // 綠色，左側
+        { id: 'KMT', name: '國民黨', count: 39, color: '#000095' }, // 藍色，右側
+      ];
+
+      // 政黨名稱對應
+      const partyNameMap = {
+        民主進步黨: 'DPP',
+        中國國民黨: 'KMT',
+        無: 'IND',
+      };
 
       /**
-       * 計算半圓形排列的席位位置
-       * @returns {Array} 席位數據陣列，每個元素包含 { x, y, angle, row, index }
+       * 讀取 CSV 資料並排序
        */
-      const calculateSeatPositions = () => {
+      const loadCandidateData = async () => {
+        try {
+          const data = await d3.csv(
+            '/legislator-election-24/data/csv/elected_legislators_final.csv'
+          );
+
+          // 將得票數轉換為數字
+          data.forEach((d) => {
+            d.得票數 = +d.得票數;
+            d.partyId = partyNameMap[d.推薦之政黨] || 'IND';
+          });
+
+          // 按照政黨和得票數排序
+          data.sort((a, b) => {
+            // 先按政黨排序（無黨籍、民進黨、國民黨）
+            const partyOrder = { IND: 0, DPP: 1, KMT: 2 };
+            const partyDiff = partyOrder[a.partyId] - partyOrder[b.partyId];
+            if (partyDiff !== 0) return partyDiff;
+
+            // 同政黨內按得票數降序排序
+            return b.得票數 - a.得票數;
+          });
+
+          candidateData.value = data;
+          return data;
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('讀取 CSV 資料失敗:', error);
+          return [];
+        }
+      };
+
+      /**
+       * 核心算法：生成座位座標
+       * @param {number} totalSeats - 總席位數
+       * @param {number} rowCount - 排數
+       * @param {number} innerRadius - 內圈半徑
+       * @param {number} outerRadius - 外圈半徑
+       * @returns {Array} 座位座標陣列
+       */
+      const generateParliamentSeats = (totalSeats, rowCount, innerRadius, outerRadius) => {
         const seats = [];
-        const centerX = 0;
-        const centerY = 0;
 
-        // 定義每排的席數，形成半圓形排列（參考圖片樣式）
-        // 從內排到外排，席數逐漸增加：5, 7, 9, 11, 13, 15, 19 = 79 席
-        const seatsPerRow = [5, 7, 9, 11, 13, 15, 19];
+        // 計算每一層半徑
+        const radii = [];
+        const step = (outerRadius - innerRadius) / (rowCount - 1);
+        for (let i = 0; i < rowCount; i++) {
+          radii.push(innerRadius + i * step);
+        }
 
-        let seatIndex = 0;
-        const baseRadius = 60; // 第一排（最內排）的基礎半徑
-        const radiusStep = 50; // 每排半徑增加量
+        // 計算每一層的弧長，用來分配座位數量
+        // 公式：弧長 = PI * r
+        const arcLengths = radii.map((r) => Math.PI * r);
+        const totalArcLength = d3.sum(arcLengths);
 
-        seatsPerRow.forEach((seatsInRow, rowIndex) => {
-          const radius = baseRadius + rowIndex * radiusStep;
-
-          // 計算角度範圍：完整的半圓形（180度），從左到右
-          const angleSpan = Math.PI; // 完整的半圓
-          const startAngle = Math.PI; // 從左邊開始 (180度)
-          const angleStep = angleSpan / (seatsInRow + 1); // 均勻分佈，留出邊距
-
-          for (let i = 0; i < seatsInRow; i++) {
-            const angle = startAngle + angleStep * (i + 1);
-            const x = centerX + Math.cos(angle) * radius;
-            const y = centerY + Math.sin(angle) * radius;
-
-            seats.push({
-              x,
-              y,
-              angle: (angle * 180) / Math.PI, // 轉換為度數
-              row: rowIndex,
-              index: seatIndex,
-              id: seatIndex + 1,
-            });
-
-            seatIndex++;
+        let seatsAllocated = 0;
+        const rowCounts = arcLengths.map((len, i) => {
+          // 最後一排用減法確保總數精確等於 totalSeats
+          if (i === rowCount - 1) {
+            return totalSeats - seatsAllocated;
           }
+          const count = Math.round(totalSeats * (len / totalArcLength));
+          seatsAllocated += count;
+          return count;
+        });
+
+        // 生成每個座位的座標（從內圈往外圈）
+        rowCounts.forEach((count, rowIndex) => {
+          const r = radii[rowIndex];
+          // 角度範圍：從 PI (180度, 左邊) 到 0 (0度, 右邊)
+          const angleStep = Math.PI / (count - 1 || 1); // 避免除以0
+
+          for (let i = 0; i < count; i++) {
+            const angle = Math.PI - i * angleStep;
+
+            // 極座標轉笛卡兒座標
+            seats.push({
+              x: r * Math.cos(angle),
+              y: r * Math.sin(angle),
+              r: r,
+              theta: angle,
+              row: rowIndex,
+            });
+          }
+        });
+
+        // 根據角度排序（從左到右）
+        seats.sort((a, b) => b.theta - a.theta);
+
+        // 為每個座位添加編號（從 1 開始）
+        seats.forEach((seat, index) => {
+          seat.number = index + 1;
         });
 
         return seats;
@@ -64,8 +140,15 @@
       /**
        * 繪製議會席位圖
        */
-      const drawParliamentSeats = () => {
+      const drawParliamentSeats = async () => {
         if (!containerRef.value) return;
+
+        // 讀取候選人資料
+        const candidates = await loadCandidateData();
+        if (candidates.length === 0) {
+          // eslint-disable-next-line no-console
+          console.warn('無法讀取候選人資料，使用預設編號');
+        }
 
         // 清除舊的 SVG
         if (svg) {
@@ -77,30 +160,146 @@
         const width = rect.width;
         const height = rect.height;
 
-        // 計算縮放和居中
-        const seats = calculateSeatPositions();
+        // 計算總席位數（從政黨資料計算）
+        const totalSeats = d3.sum(partyData, (d) => d.count);
 
-        // 計算所有席位的邊界
-        const xExtent = d3.extent(seats, (d) => d.x);
-        const yExtent = d3.extent(seats, (d) => d.y);
-        const extentWidth = xExtent[1] - xExtent[0];
-        const extentHeight = yExtent[1] - yExtent[0];
+        // 根據容器大小計算合適的半徑
+        const maxRadius = Math.min(width * 0.45, height * 0.85);
+        const innerRadius = maxRadius * 0.3;
+        const outerRadius = maxRadius * 0.95;
 
-        // 添加邊距
-        const padding = 100;
-        const availableWidth = width - padding * 2;
-        const availableHeight = height - padding * 2;
+        // 生成座位座標（5排）
+        const seatCoords = generateParliamentSeats(totalSeats, 5, innerRadius, outerRadius);
 
-        // 計算縮放比例
-        const scale = Math.min(availableWidth / extentWidth, availableHeight / extentHeight) * 0.9; // 稍微縮小一點，留出更多空間
+        // 將政黨資料展開並合併到座標資料中（從中間開始分配）
+        const finalData = new Array(seatCoords.length).fill(null);
+        const centerIndex = Math.floor(seatCoords.length / 2); // 中間座位索引
 
-        // 計算偏移量（居中）
-        const centerX = width / 2;
-        const centerY = height / 2;
-        const offsetX = centerX - ((xExtent[0] + xExtent[1]) / 2) * scale;
-        const offsetY = centerY - ((yExtent[0] + yExtent[1]) / 2) * scale;
+        // 先分配無黨籍（中間，2個座位）
+        const indParty = partyData[0]; // 無黨籍
+        // 無黨籍應該在索引 38, 39（中間偏左），這樣國民黨才能有 39 個座位
+        const indStartIndex = centerIndex - 1;
+        for (let i = 0; i < indParty.count; i++) {
+          const seatIndex = indStartIndex + i;
+          if (seatIndex >= 0 && seatIndex < seatCoords.length) {
+            finalData[seatIndex] = {
+              ...seatCoords[seatIndex],
+              party: indParty.id,
+              partyName: indParty.name,
+              color: indParty.color,
+              partySeatNumber: i + 1, // 黨內編號從 1 開始
+            };
+          }
+        }
 
-        // 創建 SVG（黑色背景）
+        // 向左分配民進黨（38個座位）
+        const dppParty = partyData[1]; // 民進黨
+        let dppSeatNumber = 1;
+        // 從無黨籍左邊開始分配，確保分配 38 個
+        for (let i = indStartIndex - 1; i >= 0; i--) {
+          if (finalData[i] === null && dppSeatNumber <= dppParty.count) {
+            finalData[i] = {
+              ...seatCoords[i],
+              party: dppParty.id,
+              partyName: dppParty.name,
+              color: dppParty.color,
+              partySeatNumber: dppSeatNumber++,
+            };
+          }
+        }
+
+        // 向右分配國民黨（39個座位）
+        const kmtParty = partyData[2]; // 國民黨
+        let kmtSeatNumber = 1;
+        // 從無黨籍右邊開始分配，確保分配 39 個
+        for (let i = indStartIndex + indParty.count; i < seatCoords.length; i++) {
+          if (finalData[i] === null && kmtSeatNumber <= kmtParty.count) {
+            finalData[i] = {
+              ...seatCoords[i],
+              party: kmtParty.id,
+              partyName: kmtParty.name,
+              color: kmtParty.color,
+              partySeatNumber: kmtSeatNumber++,
+            };
+          }
+        }
+
+        // 過濾掉未分配的座位（應該全部都有分配）
+        const filteredData = finalData.filter((d) => d !== null);
+
+        // 按照排數（從內圈到外圈）重新分配編號
+        // 將座位按政黨分組，然後按排數排序分配編號
+        const partyGroups = {
+          [indParty.id]: [],
+          [dppParty.id]: [],
+          [kmtParty.id]: [],
+        };
+
+        filteredData.forEach((seat) => {
+          partyGroups[seat.party].push(seat);
+        });
+
+        // 對每個政黨的座位，按照排數（row）從外到內排序，然後分配候選人姓名
+        Object.keys(partyGroups).forEach((partyId) => {
+          const seats = partyGroups[partyId];
+          // 按排數排序：row 越大（外圈）越前面，這樣外圈上方會是編號 1
+          // 同排時，按照距離中間的角度距離排序（中間上方的編號最小）
+          seats.sort((a, b) => {
+            if (a.row !== b.row) {
+              return b.row - a.row; // 排數大的（外圈）在前
+            }
+            // 同排時，計算到中間（Math.PI / 2）的角度距離
+            const centerAngle = Math.PI / 2; // 90度，正上方
+            const distA = Math.abs(a.theta - centerAngle);
+            const distB = Math.abs(b.theta - centerAngle);
+            return distA - distB; // 距離中間越近的越前面
+          });
+
+          // 找到該政黨的候選人列表
+          const partyCandidates = candidates.filter((c) => c.partyId === partyId);
+
+          // 分配候選人姓名、排名和得票數
+          seats.forEach((seat, index) => {
+            if (index < partyCandidates.length) {
+              const candidate = partyCandidates[index];
+              seat.candidateName = candidate.候選人姓名;
+              seat.rank = index + 1; // 黨內排名
+              seat.votes = candidate.得票數; // 得票數
+            } else {
+              seat.candidateName = `編號${index + 1}`;
+              seat.rank = index + 1;
+              seat.votes = 0;
+            }
+          });
+        });
+
+        // 預設半徑（用於沒有得票數的情況）
+        const baseRadius = Math.min(maxRadius / 14, 18);
+
+        // 為每個座位計算半徑（根據得票數）
+        // 面積 = 得票數 / 10
+        // 面積 = π × r²，所以 r = √(得票數 / (10 × π))
+        filteredData.forEach((seat) => {
+          if (seat.votes && seat.votes > 0) {
+            // 半徑 = √(得票數 / (10 × π))
+            seat.radius = Math.sqrt(seat.votes / (10 * Math.PI));
+          } else {
+            // 如果沒有得票數，使用預設半徑
+            seat.radius = baseRadius;
+          }
+        });
+
+        // 調試：檢查分配情況
+        // eslint-disable-next-line no-console
+        console.log('分配情況:', {
+          總座位數: seatCoords.length,
+          民進黨: dppSeatNumber - 1,
+          無黨籍: indParty.count,
+          國民黨: kmtSeatNumber - 1,
+          已分配: filteredData.length,
+        });
+
+        // 創建 SVG
         svg = d3
           .select(container)
           .append('svg')
@@ -108,33 +307,101 @@
           .attr('height', height)
           .style('background', '#000000');
 
-        // 創建主容器組
-        g = svg.append('g').attr('transform', `translate(${offsetX}, ${offsetY}) scale(${scale})`);
+        // 創建主容器組，移到下方中間
+        const g = svg.append('g').attr('transform', `translate(${width / 2}, ${height - 30})`);
 
-        // 繪製席位（統一顏色，參考圖片樣式）
-        const seatRadius = 8; // 較小的圓點，類似圖片
-        const seatGroup = g.append('g').attr('class', 'seats');
-
-        seatGroup
-          .selectAll('.seat')
-          .data(seats)
+        // 為每個座位創建一個組（包含圓點和文字）
+        const seatGroups = g
+          .selectAll('.seat-group')
+          .data(filteredData)
           .enter()
+          .append('g')
+          .attr('class', 'seat-group')
+          .attr('transform', (d) => `translate(${d.x}, ${-d.y})`);
+
+        // 繪製座位圓點（根據得票數調整半徑，移除白色邊框，透明度50%）
+        seatGroups
           .append('circle')
           .attr('class', 'seat')
-          .attr('cx', (d) => d.x)
-          .attr('cy', (d) => d.y)
-          .attr('r', seatRadius)
-          .attr('fill', '#4a90e2') // 統一顏色，後續可根據需要分組
+          .attr('cx', 0)
+          .attr('cy', 0)
+          .attr('r', (d) => d.radius || Math.min(maxRadius / 14, 18))
+          .attr('fill', (d) => d.color)
           .attr('stroke', 'none')
+          .attr('opacity', 0.5) // 透明度50%
           .attr('cursor', 'pointer')
           .on('mouseover', function () {
-            d3.select(this).attr('fill', '#6ba3e8').attr('opacity', 0.8);
+            d3.select(this).attr('opacity', 0.8);
           })
           .on('mouseout', function () {
-            d3.select(this).attr('fill', '#4a90e2').attr('opacity', 1);
+            d3.select(this).attr('opacity', 0.5); // 恢復到50%透明度
           });
 
-        console.log('[MapTab] 議會席位圖繪製完成，共', seats.length, '席');
+        // 統一字體大小為14px
+        const fontSize = 14;
+
+        // 繪製排名（在名字上方）
+        seatGroups
+          .append('text')
+          .attr('class', 'seat-rank')
+          .attr('text-anchor', 'middle')
+          .attr('x', 0)
+          .attr('y', (d) => -(d.radius || baseRadius) * 0.7) // 在圓的上方
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .style('font-family', 'Arial, sans-serif')
+          .style('fill', '#ffffff')
+          .style('pointer-events', 'none')
+          .text((d) => (d.rank ? `${d.rank}` : ''));
+
+        // 繪製候選人姓名
+        seatGroups
+          .append('text')
+          .attr('class', 'seat-number')
+          .attr('text-anchor', 'middle')
+          .attr('x', 0)
+          .attr('y', (d) => (d.radius || baseRadius) * 0.2) // 姓名位置稍微上移
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .style('font-family', 'Arial, sans-serif')
+          .style('fill', '#ffffff')
+          .style('pointer-events', 'none') // 讓文字不阻擋滑鼠事件
+          .text((d) => d.candidateName || '');
+
+        // 繪製得票數（在姓名下方）
+        seatGroups
+          .append('text')
+          .attr('class', 'seat-votes')
+          .attr('text-anchor', 'middle')
+          .attr('x', 0)
+          .attr('y', (d) => (d.radius || baseRadius) * 0.5) // 在姓名下方
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'normal')
+          .style('font-family', 'Arial, sans-serif')
+          .style('fill', '#ffffff')
+          .style('opacity', 0.9)
+          .style('pointer-events', 'none')
+          .text((d) => {
+            if (d.votes && d.votes > 0) {
+              // 格式化得票數，加上千分位逗號
+              return d.votes.toLocaleString('zh-TW');
+            }
+            return '';
+          });
+
+        // 繪製中間的大數字（總席次）
+        g.append('text')
+          .attr('text-anchor', 'middle')
+          .attr('x', 0)
+          .attr('y', -10)
+          .style('font-size', `${Math.min(maxRadius / 3, 60)}px`)
+          .style('font-weight', 'bold')
+          .style('font-family', 'Arial, sans-serif')
+          .style('fill', '#ffffff')
+          .text(totalSeats);
+
+        // eslint-disable-next-line no-console
+        console.log('[MapTab] 議會席位圖繪製完成，共', totalSeats, '席');
       };
 
       /**
@@ -146,7 +413,6 @@
           clearTimeout(resizeTimer);
         }
         resizeTimer = setTimeout(() => {
-          console.log('[MapTab] 窗口大小調整，重新繪製席位圖');
           drawParliamentSeats();
         }, 300);
       };
@@ -170,7 +436,6 @@
           svg.remove();
           svg = null;
         }
-        g = null;
       });
 
       return {
@@ -185,12 +450,23 @@
 </template>
 
 <style scoped>
-  @import '../assets/css/common.css';
-
   .parliament-container {
     width: 100%;
     height: 100%;
     overflow: hidden;
     background: #000000;
+    position: relative;
+  }
+
+  :deep(.seat) {
+    transition: all 0.2s ease;
+  }
+
+  :deep(.seat:hover) {
+    filter: brightness(1.2);
+  }
+
+  :deep(.seat-number) {
+    user-select: none;
   }
 </style>
