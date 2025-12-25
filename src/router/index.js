@@ -9,7 +9,8 @@
  */
 
 import { createRouter, createWebHistory } from 'vue-router';
-import HomeView from '../views/HomeView.vue';
+import CircleView from '../views/CircleView.vue';
+import RectView from '../views/RectView.vue';
 
 /**
  * 📍 路由配置陣列
@@ -17,9 +18,18 @@ import HomeView from '../views/HomeView.vue';
  */
 const routes = [
   {
-    path: '/', // 🏠 根路徑
-    name: 'Home', // 路由名稱
-    component: HomeView, // 對應的 Vue 組件
+    path: '/', // 🏠 根路徑，重定向到 circle
+    redirect: '/circle',
+  },
+  {
+    path: '/circle', // ⭕ 圓形視圖
+    name: 'CircleView',
+    component: CircleView,
+  },
+  {
+    path: '/rect', // ▢ 方形視圖
+    name: 'RectView',
+    component: RectView,
   },
 ];
 
