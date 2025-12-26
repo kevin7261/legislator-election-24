@@ -11,6 +11,9 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import CircleView from '../views/CircleView.vue';
 import RectView from '../views/RectView.vue';
+import BarView from '../views/BarView.vue';
+import BarView2 from '../views/BarView2.vue';
+import TreemapView from '../views/TreemapView.vue';
 
 /**
  * 📍 路由配置陣列
@@ -30,6 +33,21 @@ const routes = [
     path: '/rect', // ▢ 方形視圖
     name: 'RectView',
     component: RectView,
+  },
+  {
+    path: '/bar', // 📊 長條圖視圖
+    name: 'BarView',
+    component: BarView,
+  },
+  {
+    path: '/bar2', // 📈 長條圖視圖2（交錯版）
+    name: 'BarView2',
+    component: BarView2,
+  },
+  {
+    path: '/treemap', // 📦 樹狀圖視圖
+    name: 'TreemapView',
+    component: TreemapView,
   },
 ];
 

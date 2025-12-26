@@ -1,9 +1,9 @@
 <script>
   /**
-   * ▢ RectView.vue - 方形議會席位圖
+   * 📊 BarView.vue - 橫向長條圖議會席位圖
    *
-   * 使用 D3.js 繪製方形網格議會席位圖
-   * 三個網格群，每個 6*7，政黨顏色區分
+   * 使用 D3.js 繪製橫向長條圖
+   * 三個政黨分組，每個長條顯示候選人
    */
 
   import { ref, onMounted, onUnmounted, nextTick } from 'vue';
@@ -11,7 +11,7 @@
   import AppLayout from '../components/AppLayout.vue';
 
   export default {
-    name: 'RectView',
+    name: 'BarView',
     components: { AppLayout },
     setup() {
       const containerRef = ref(null);
@@ -24,14 +24,6 @@
         { id: 'DPP', name: '民進黨', count: 38, color: '#6BCB77' }, // 清新的綠色
         { id: 'KMT', name: '國民黨', count: 39, color: '#4D96FF' }, // 明亮的藍色
       ];
-
-      // ⚙️ 面積計算配置：面積 = 得票數 / areaDivisor
-      const areaDivisor = 18;
-
-      // 網格配置：每個網格群 6*7 = 42 個格子
-      const gridCols = 6;
-      const gridRows = 7;
-      const gridSize = gridCols * gridRows; // 42
 
       // 截取名字的第一個空白前的部分
       const getShortName = (name) => {
@@ -86,9 +78,9 @@
       };
 
       /**
-       * 繪製方形網格議會席位圖
+       * 繪製橫向長條圖
        */
-      const drawRectSeats = async () => {
+      const drawBarChart = async () => {
         if (!containerRef.value) return;
 
         // 讀取候選人資料
@@ -111,88 +103,36 @@
         // 計算總席位數
         const totalSeats = d3.sum(partyData, (d) => d.count);
 
-        // 三個網格群的配置
-        const numGrids = 3;
-        const gridSpacing = 40; // 網格群之間的間距
-        const padding = 60; // 整體邊距
+        // 佈局參數
+        const padding = { top: 60, right: 40, bottom: 60, left: 40 };
+        const partySpacing = 40; // 政黨之間的間距
+        const barSpacing = 4; // 長條之間的間距
+        const availableHeight = height - padding.top - padding.bottom - partySpacing * (partyData.length - 1);
 
-        // 計算每個網格群的大小
-        const availableWidth = width - padding * 2 - gridSpacing * (numGrids - 1);
-        const gridWidth = availableWidth / numGrids;
-        const gridHeight = height - padding * 2;
-
-        // 計算每個方塊的大小（考慮間距）
-        const cellPadding = 4;
-        const cellWidth = (gridWidth - cellPadding * (gridCols + 1)) / gridCols;
-        const cellHeight = (gridHeight - cellPadding * (gridRows + 1)) / gridRows;
-
-        // 分配席位到三個網格群
-        // 網格群1：民進黨 38 個
-        // 網格群2：國民黨 39 個 + 無黨籍 2 個 = 41 個
-        // 網格群3：留空或顯示總數
-
-        const gridAssignments = [
-          {
-            party: 'DPP',
-            count: partyData[1].count, // 38
-            startIndex: 0,
-          },
-          {
-            party: 'KMT',
-            count: partyData[2].count, // 39
-            startIndex: partyData[1].count, // 38
-          },
-          {
-            party: 'IND',
-            count: partyData[0].count, // 2
-            startIndex: partyData[1].count + partyData[2].count, // 77
-          },
-        ];
-
-        // 準備所有席位的資料
-        const allSeats = [];
-
-        gridAssignments.forEach((assignment, gridIndex) => {
-          const party = partyData.find((p) => p.id === assignment.party);
-          const partyCandidates = candidates.filter((c) => c.partyId === assignment.party);
-
-          // 在該網格群內分配席位
-          for (let i = 0; i < assignment.count && i < gridSize; i++) {
-            const row = Math.floor(i / gridCols);
-            const col = i % gridCols;
-
-            const candidate = partyCandidates[i] || null;
-
-            allSeats.push({
-              gridIndex,
-              row,
-              col,
-              party: party.id,
-              partyName: party.name,
-              color: party.color,
-              candidateName: candidate ? candidate.候選人姓名 : `編號${i + 1}`,
-              votes: candidate ? candidate.得票數 : 0,
+        // 為每個政黨分配候選人
+        const partyGroups = partyData.map((party) => {
+          const partyCandidates = candidates.filter((c) => c.partyId === party.id);
+          return {
+            ...party,
+            candidates: partyCandidates.slice(0, party.count).map((c, i) => ({
+              name: c.候選人姓名,
+              votes: c.得票數,
               rank: i + 1,
-              district: candidate ? `${candidate.縣市}${candidate.選舉區別}` : '',
-            });
-          }
+              district: `${c.縣市}${c.選舉區別}`,
+            })),
+          };
         });
 
-        // 計算每個方塊的大小（根據得票數）
-        const baseSize = Math.min(cellWidth, cellHeight) * 0.9; // 預設大小
-        allSeats.forEach((seat) => {
-          if (seat.votes && seat.votes > 0) {
-            // 面積 = 得票數 / areaDivisor
-            // 方形面積 = side²，所以 side = √(得票數 / areaDivisor)
-            const area = seat.votes / areaDivisor;
-            seat.size = Math.sqrt(area);
-            // 限制最大和最小尺寸
-            seat.size = Math.max(seat.size, baseSize * 0.3);
-            seat.size = Math.min(seat.size, baseSize);
-          } else {
-            seat.size = baseSize * 0.5;
-          }
+        // 計算每個政黨區域的高度
+        const partyHeights = partyGroups.map((party) => {
+          // 每個政黨的高度 = (可用高度 / 總席位數) * 該政黨的席位數
+          return (availableHeight / totalSeats) * party.count;
         });
+
+        // 計算每個長條的寬度（根據得票數）
+        const maxVotes = d3.max(candidates, (d) => d.得票數) || 1;
+        const availableWidth = width - padding.left - padding.right;
+        const maxBarWidth = availableWidth * 0.8; // 最大長條寬度為可用寬度的80%
 
         // 創建 SVG
         svg = d3
@@ -219,35 +159,51 @@
           .style('z-index', 1000)
           .style('box-shadow', '0 4px 12px rgba(0, 0, 0, 0.3)');
 
-        // 創建主容器組，水平垂直置中
-        const g = svg.append('g').attr('transform', `translate(${padding}, ${padding})`);
+        // 創建主容器組
+        const g = svg.append('g').attr('transform', `translate(${padding.left}, ${padding.top})`);
 
-        // 繪製三個網格群
-        gridAssignments.forEach((assignment, gridIndex) => {
-          const gridX = gridIndex * (gridWidth + gridSpacing);
-          const gridG = g.append('g').attr('transform', `translate(${gridX}, 0)`);
+        let currentY = 0;
 
-          // 繪製該網格群的席位
-          const gridSeats = allSeats.filter((s) => s.gridIndex === gridIndex);
+        // 繪製每個政黨的長條圖
+        partyGroups.forEach((party, partyIndex) => {
+          const partyHeight = partyHeights[partyIndex];
+          const partyG = g.append('g').attr('transform', `translate(0, ${currentY})`);
 
-          gridSeats.forEach((seat) => {
-            const x = seat.col * (cellWidth + cellPadding) + cellPadding + cellWidth / 2;
-            const y = seat.row * (cellHeight + cellPadding) + cellPadding + cellHeight / 2;
+          // 繪製政黨標籤
+          partyG
+            .append('text')
+            .attr('x', -10)
+            .attr('y', partyHeight / 2)
+            .attr('text-anchor', 'end')
+            .attr('dominant-baseline', 'middle')
+            .style('font-size', '16px')
+            .style('font-weight', '600')
+            .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Helvetica Neue", Arial, sans-serif')
+            .style('fill', '#333333')
+            .text(party.name);
 
-            const seatGroup = gridG
+          // 計算每個長條的高度
+          const barHeight = (partyHeight - barSpacing * (party.candidates.length - 1)) / party.candidates.length;
+
+          // 繪製每個候選人的長條
+          party.candidates.forEach((candidate, candidateIndex) => {
+            const barY = candidateIndex * (barHeight + barSpacing);
+            const barWidth = candidate.votes > 0
+              ? (candidate.votes / maxVotes) * maxBarWidth
+              : maxBarWidth * 0.1; // 如果沒有得票數，使用最小寬度
+
+            const barGroup = partyG
               .append('g')
-              .attr('class', 'seat-group')
-              .attr('transform', `translate(${x}, ${y})`);
+              .attr('transform', `translate(0, ${barY})`);
 
-            // 繪製方形（使用政黨顏色）
-            seatGroup
+            // 繪製長條背景
+            barGroup
               .append('rect')
-              .attr('class', 'seat-rect')
-              .attr('x', -seat.size / 2)
-              .attr('y', -seat.size / 2)
-              .attr('width', seat.size)
-              .attr('height', seat.size)
-              .attr('fill', seat.color)
+              .attr('x', 0)
+              .attr('y', 0)
+              .attr('width', barWidth)
+              .attr('height', barHeight)
+              .attr('fill', party.color)
               .attr('opacity', 0.5)
               .attr('cursor', 'pointer')
               .on('mouseover', function () {
@@ -255,10 +211,10 @@
 
                 // 顯示 tooltip
                 const tooltipContent = [
-                  `<div style="font-weight: 700; margin-bottom: 4px;">${seat.candidateName || ''}</div>`,
-                  seat.district ? `<div style="margin-bottom: 4px;">選區：${seat.district}</div>` : '',
-                  seat.rank ? `<div style="margin-bottom: 4px;">排名：第 ${seat.rank} 名</div>` : '',
-                  seat.votes ? `<div>得票數：${seat.votes.toLocaleString('zh-TW')} 票</div>` : '',
+                  `<div style="font-weight: 700; margin-bottom: 4px;">${candidate.name || ''}</div>`,
+                  candidate.district ? `<div style="margin-bottom: 4px;">選區：${candidate.district}</div>` : '',
+                  candidate.rank ? `<div style="margin-bottom: 4px;">排名：第 ${candidate.rank} 名</div>` : '',
+                  candidate.votes ? `<div>得票數：${candidate.votes.toLocaleString('zh-TW')} 票</div>` : '',
                 ].filter(Boolean).join('');
 
                 tooltip
@@ -275,28 +231,37 @@
                 tooltip.style('opacity', 0);
               });
 
-            // 字體設定
-            const nameFontSize = 14;
-            const fontFamily =
-              '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Helvetica Neue", Arial, sans-serif';
-            const textColor = '#333333';
-
-            // 繪製姓名（居中）
-            seatGroup
+            // 繪製候選人姓名
+            const nameFontSize = Math.min(barHeight * 0.4, 12);
+            barGroup
               .append('text')
-              .attr('class', 'seat-name')
-              .attr('text-anchor', 'middle')
-              .attr('x', 0)
-              .attr('y', 0)
+              .attr('x', 8)
+              .attr('y', barHeight / 2)
+              .attr('dominant-baseline', 'middle')
               .style('font-size', `${nameFontSize}px`)
               .style('font-weight', '700')
-              .style('font-family', fontFamily)
-              .style('fill', textColor)
-              .style('letter-spacing', '0.3px')
+              .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Helvetica Neue", Arial, sans-serif')
+              .style('fill', '#333333')
               .style('pointer-events', 'none')
-              .style('dominant-baseline', 'middle')
-              .text(getShortName(seat.candidateName || ''));
+              .text(getShortName(candidate.name || ''));
+
+            // 繪製得票數（在長條右側）
+            if (candidate.votes > 0) {
+              barGroup
+                .append('text')
+                .attr('x', barWidth + 8)
+                .attr('y', barHeight / 2)
+                .attr('dominant-baseline', 'middle')
+                .style('font-size', `${nameFontSize}px`)
+                .style('font-weight', '500')
+                .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Helvetica Neue", Arial, sans-serif')
+                .style('fill', '#666666')
+                .style('pointer-events', 'none')
+                .text(candidate.votes.toLocaleString('zh-TW'));
+            }
           });
+
+          currentY += partyHeight + partySpacing;
         });
 
         // 繪製總席次（在底部中央）
@@ -317,7 +282,7 @@
           .text(totalSeats);
 
         // eslint-disable-next-line no-console
-        console.log('[RectView] 方形網格議會席位圖繪製完成，共', totalSeats, '席');
+        console.log('[BarView] 橫向長條圖繪製完成，共', totalSeats, '席');
       };
 
       /**
@@ -329,14 +294,14 @@
           clearTimeout(resizeTimer);
         }
         resizeTimer = setTimeout(() => {
-          drawRectSeats();
+          drawBarChart();
         }, 300);
       };
 
       // 生命週期：組件掛載
       onMounted(() => {
         nextTick(() => {
-          drawRectSeats();
+          drawBarChart();
         });
         window.addEventListener('resize', handleResize);
       });
@@ -366,12 +331,12 @@
 
 <template>
   <AppLayout>
-    <div ref="containerRef" class="rect-container"></div>
+    <div ref="containerRef" class="bar-container"></div>
   </AppLayout>
 </template>
 
 <style scoped>
-  .rect-container {
+  .bar-container {
     width: 100%;
     height: 100%;
     overflow: hidden;
@@ -382,15 +347,15 @@
     justify-content: center;
   }
 
-  :deep(.seat-group) {
+  :deep(.bar-group) {
     transition: all 0.2s ease;
   }
 
-  :deep(.seat-rect:hover) {
+  :deep(.bar-rect:hover) {
     filter: brightness(1.2);
   }
 
-  :deep(.seat-name) {
+  :deep(.bar-name) {
     user-select: none;
   }
 </style>

@@ -275,10 +275,12 @@
               seat.candidateName = candidate.候選人姓名;
               seat.rank = index + 1; // 黨內排名
               seat.votes = candidate.得票數; // 得票數
+              seat.district = `${candidate.縣市}${candidate.選舉區別}`; // 選區
             } else {
               seat.candidateName = `編號${index + 1}`;
               seat.rank = index + 1;
               seat.votes = 0;
+              seat.district = '';
             }
           });
         });
@@ -306,6 +308,23 @@
           .attr('width', width)
           .attr('height', height)
           .style('background', '#FFFFFF');
+
+        // 創建 tooltip
+        const tooltip = d3
+          .select('body')
+          .append('div')
+          .attr('class', 'seat-tooltip')
+          .style('position', 'absolute')
+          .style('padding', '12px 16px')
+          .style('background', 'rgba(0, 0, 0, 0.85)')
+          .style('color', '#ffffff')
+          .style('border-radius', '8px')
+          .style('font-size', '14px')
+          .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Helvetica Neue", Arial, sans-serif')
+          .style('pointer-events', 'none')
+          .style('opacity', 0)
+          .style('z-index', 1000)
+          .style('box-shadow', '0 4px 12px rgba(0, 0, 0, 0.3)');
 
         // 計算整個半圓的高度（用於垂直居中）
         const maxY = d3.max(filteredData, (d) => d.y);
@@ -337,11 +356,29 @@
           .attr('fill', (d) => d.color)
           .attr('opacity', 0.5)
           .attr('cursor', 'pointer')
-          .on('mouseover', function () {
+          .on('mouseover', function (event, d) {
             d3.select(this).attr('opacity', 0.7);
+
+            // 顯示 tooltip
+            const tooltipContent = [
+              `<div style="font-weight: 700; margin-bottom: 4px;">${d.candidateName || ''}</div>`,
+              d.district ? `<div style="margin-bottom: 4px;">選區：${d.district}</div>` : '',
+              d.rank ? `<div style="margin-bottom: 4px;">排名：第 ${d.rank} 名</div>` : '',
+              d.votes ? `<div>得票數：${d.votes.toLocaleString('zh-TW')} 票</div>` : '',
+            ].filter(Boolean).join('');
+
+            tooltip
+              .html(tooltipContent)
+              .style('opacity', 1);
+          })
+          .on('mousemove', function (event) {
+            tooltip
+              .style('left', `${event.pageX + 10}px`)
+              .style('top', `${event.pageY - 10}px`);
           })
           .on('mouseout', function () {
             d3.select(this).attr('opacity', 0.5);
+            tooltip.style('opacity', 0);
           });
 
         // 字體設定
@@ -411,6 +448,9 @@
           clearTimeout(resizeTimer);
         }
         window.removeEventListener('resize', handleResize);
+
+        // 移除 tooltip
+        d3.selectAll('.seat-tooltip').remove();
 
         if (svg) {
           svg.remove();

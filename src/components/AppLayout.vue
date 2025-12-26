@@ -23,6 +23,9 @@
       const navItems = [
         { path: '/circle', label: '圓形視圖', icon: '⭕' },
         { path: '/rect', label: '方形視圖', icon: '▢' },
+        { path: '/bar', label: '長條圖視圖', icon: '📊' },
+        { path: '/bar2', label: '長條圖視圖2', icon: '📈' },
+        { path: '/treemap', label: '樹狀圖視圖', icon: '📦' },
       ];
 
       const isActive = (path) => {
