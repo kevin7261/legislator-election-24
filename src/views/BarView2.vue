@@ -123,9 +123,9 @@
 
         // 計算每個長條的高度
         const availableHeight = height - padding.top - padding.bottom;
-        const mainBarHeight = 4; // Bar高度固定為4px
+        const lineWidth = 2; // Line寬度固定為2px
         const barSpacing = 0; // Bar之間的間距為0px（非常緊湊）
-        const rowHeight = mainBarHeight + 6 + barSpacing; // 每行總高度（包含bar、文字和bar間距）
+        const rowHeight = lineWidth + 6 + barSpacing; // 每行總高度（包含line、文字和bar間距）
 
         // 計算每個長條的寬度（根據得票數）
         const maxVotes = d3.max(candidates, (d) => d.得票數) || 1;
@@ -206,14 +206,16 @@
               .append('g')
               .attr('transform', `translate(0, ${barY})`);
 
-            // 繪製長條背景
+            // 繪製長條（使用line物件）
+            const lineY = lineWidth / 2; // Line的y座標（垂直置中）
             barGroup
-              .append('rect')
-              .attr('x', 0)
-              .attr('y', 0)
-              .attr('width', barWidth)
-              .attr('height', mainBarHeight)
-              .attr('fill', isInd ? partyData[0].color : partyData[2].color) // 無黨籍或國民黨顏色
+              .append('line')
+              .attr('x1', 0)
+              .attr('y1', lineY)
+              .attr('x2', barWidth)
+              .attr('y2', lineY)
+              .attr('stroke', isInd ? partyData[0].color : partyData[2].color) // 無黨籍或國民黨顏色
+              .attr('stroke-width', lineWidth)
               .attr('opacity', 0.5)
               .attr('cursor', 'pointer')
               .on('mouseover', function () {
@@ -240,7 +242,7 @@
             barGroup
               .append('text')
               .attr('x', -8)
-              .attr('y', mainBarHeight + 4)
+              .attr('y', lineWidth + 4)
               .attr('text-anchor', 'end')
               .attr('dominant-baseline', 'middle')
               .style('font-size', '10px')
@@ -262,14 +264,16 @@
               .append('g')
               .attr('transform', `translate(${availableWidth - barWidth}, ${barY})`);
 
-            // 繪製長條背景
+            // 繪製長條（使用line物件）
+            const lineY = lineWidth / 2; // Line的y座標（垂直置中）
             barGroup
-              .append('rect')
-              .attr('x', 0)
-              .attr('y', 0)
-              .attr('width', barWidth)
-              .attr('height', mainBarHeight)
-              .attr('fill', partyData[1].color) // 民進黨顏色
+              .append('line')
+              .attr('x1', 0)
+              .attr('y1', lineY)
+              .attr('x2', barWidth)
+              .attr('y2', lineY)
+              .attr('stroke', partyData[1].color) // 民進黨顏色
+              .attr('stroke-width', lineWidth)
               .attr('opacity', 0.5)
               .attr('cursor', 'pointer')
               .on('mouseover', function () {
@@ -296,7 +300,7 @@
             barGroup
               .append('text')
               .attr('x', barWidth + 8)
-              .attr('y', mainBarHeight + 4)
+              .attr('y', lineWidth + 4)
               .attr('text-anchor', 'start')
               .attr('dominant-baseline', 'middle')
               .style('font-size', '10px')
